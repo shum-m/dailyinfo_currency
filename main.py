@@ -206,7 +206,7 @@ if __name__ == '__main__':
                 #Создаем распоряжение
                 division = db.cursor.execute('''SELECT division_id FROM USER_AUTHORIZATOR WHERE id = '{0}';'''.format(user[0])).fetchone()[0]
                 branch = db.cursor.execute('''SELECT branch_id FROM CURRENCY_SCOPE WHERE division_id = '{0}';'''.format(division)).fetchone()[0]
-                dateNow = db.cursor.execute('''SELECT datetime('now')''').fetchone()[0]
+                dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
 
                 db.cursor.execute('''INSERT INTO CURRENCY_ORDER (created ,created_by, branch_id)
                 VALUES ('{0}', '{1}','{2}');'''.format(dateNow, user[0], branch))
@@ -239,7 +239,7 @@ if __name__ == '__main__':
                 #Находим уже существующие курсы, обновляем ордер и архив
                 codesExist = db.cursor.execute('''SELECT currency_no_1 FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(dateStr)).fetchall()
                 order_no = db.cursor.execute('''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(dateStr)).fetchone()[0]
-                dateNow = db.cursor.execute('''SELECT datetime('now')''').fetchone()[0]
+                dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
                 db.cursor.execute('''UPDATE CURRENCY_ORDER SET updated = '{0}', updated_by = '{1}' WHERE order_no = {2};'''.format(dateNow, user[0], order_no))
 
                 division = db.cursor.execute('''SELECT division_id FROM USER_AUTHORIZATOR WHERE id = '{0}';'''.format(user[0])).fetchone()[0]
@@ -289,7 +289,7 @@ if __name__ == '__main__':
             elif (user[1] == False and len(checkArcive) != 0) or (user[1] == True and len(checkArcive) == len(XMLParser(DailyInfoClient(date).getXML()).getValues())):
                 # Обновляем записи в распоряжениях
                 order_no = db.cursor.execute('''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(dateStr)).fetchone()[0]
-                dateNow = db.cursor.execute('''SELECT datetime('now')''').fetchone()[0]
+                dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
                 db.cursor.execute('''UPDATE CURRENCY_ORDER SET updated = '{0}', updated_by = '{1}' WHERE order_no = {2};'''.format(dateNow, user[0], order_no))
                 db.sql.commit()
 
@@ -352,8 +352,7 @@ if __name__ == '__main__':
                         '''SELECT division_id FROM USER_AUTHORIZATOR WHERE id = '{0}';'''.format(user[0])).fetchone()[0]
                     branch = db.cursor.execute(
                         '''SELECT branch_id FROM CURRENCY_SCOPE WHERE division_id = '{0}';'''.format(division)).fetchone()[0]
-                    dateNow = db.cursor.execute(
-                        '''SELECT datetime('now')''').fetchone()[0]
+                    dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
 
                     db.cursor.execute('''INSERT INTO CURRENCY_ORDER (created ,created_by, branch_id) 
                     VALUES ('{0}', '{1}','{2}');'''.format(dateNow, user[0], branch))
@@ -390,7 +389,7 @@ if __name__ == '__main__':
                     order_no = db.cursor.execute(
                         '''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(
                             dateStr)).fetchone()[0]
-                    dateNow = db.cursor.execute('''SELECT datetime('now')''').fetchone()[0]
+                    dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
                     db.cursor.execute(
                         '''UPDATE CURRENCY_ORDER SET updated = '{0}', updated_by = '{1}' WHERE order_no = {2};'''.format(
                             dateNow, user[0], order_no))
@@ -456,7 +455,7 @@ if __name__ == '__main__':
                 elif (user[1] == False and len(checkArcive) != 0) or (user[1] == True and len(checkArcive) == validCodes):
                     #Обновляем распоряжение
                     order_no = db.cursor.execute('''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(dateStr)).fetchone()[0]
-                    dateNow = db.cursor.execute('''SELECT datetime('now')''').fetchone()[0]
+                    dateNow = db.cursor.execute('''SELECT datetime('now', 'localtime')''').fetchone()[0]
 
                     db.cursor.execute(
                         '''UPDATE CURRENCY_ORDER SET updated = '{0}', updated_by = '{1}' 
