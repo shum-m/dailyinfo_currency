@@ -478,6 +478,7 @@ if __name__ == '__main__':
                     values = db.parseSelectToValue(results)
                     for i in values:
                         print(i)
+
             else:
                 print('Указаны неверные коды валют')
     db.close()
