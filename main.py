@@ -15,9 +15,11 @@ class Logger:
         logger_handler = logging.FileHandler('main.log')
         logger_handler.setLevel(logging.INFO)
 
-        logger_formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+        logger_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
         logger_handler.setFormatter(logger_formatter)
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
         self.logger.addHandler(logger_handler)
 
 
@@ -198,7 +200,7 @@ class Authorization:
         if logged is not None:
             self.login = logged[0]
             self.password = logged[1]
-            self.log.logger.info('Успешная авторизация')
+            self.log.logger.info('Успешная авторизация {0}'.format(self.login))
             return True
         else:
             self.log.logger.info('Неудачная попытка авторизации')
