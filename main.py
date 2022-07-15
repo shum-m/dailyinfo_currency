@@ -4,6 +4,7 @@ import logging
 import xmltodict
 import sqlite3
 import re
+import sys
 
 
 # Логгирование
@@ -31,7 +32,8 @@ class Value:
         self.rate = rate
 
     def __str__(self):
-        return self.scale + " " + self.code + " = " + self.rate + " RUB"
+        return "code " + self.code + " scale " + self.scale + " = " + self.rate
+        # return self.scale + " " + self.code + " = " + self.rate + " RUB"
 
 
 # Сервис DailyInfo
@@ -39,6 +41,7 @@ class DailyInfoClient:
     def __init__(self, date_list):
         # Логгирование
         self.log = Logger()
+        self.date_currency = ''
         try:
             self.date_currency = date(int(date_list[2]), int(date_list[1]), int(date_list[0]))
         except ValueError:
@@ -74,15 +77,18 @@ xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/200
 class XMLParser:
     def __init__(self, file):
         self.file = file
+        self.log = Logger()
 
     # XML -> Values List
     def get_values(self):
+        xmltodict.parse(self.file)
         dicts = xmltodict.parse(self.file)
         list_of_dicts = dicts['soap:Envelope']['soap:Body']['GetCursOnDateXMLResponse']['GetCursOnDateXMLResult']
         list_of_dicts = list_of_dicts['ValuteData']['ValuteCursOnDate']
         list_of_values = []
         for i in list_of_dicts:
-            list_of_values.append(Value(i['VchCode'], i['Vnom'], i['Vcurs']))
+            list_of_values.append(Value(i['Vcode'], i['Vnom'], i['Vcurs']))
+
         return list_of_values
 
 
@@ -168,7 +174,8 @@ class DB:
         result = []
         for i in range(len(select)):
             tmp = Value(str(select[i][2]), str(select[i][5]), str(select[i][6]))
-            result.append(tmp)
+            if tmp is not None:
+                result.append(tmp)
         return result
 
     def test(self):
@@ -217,8 +224,10 @@ class Authorization:
             return True
 
     def try_logging(self):
-        self.login = input()
-        self.password = input()
+        sys.stdout.write('login: \n')
+        self.login = sys.stdin.readline().strip()
+        sys.stdout.write('password: \n')
+        self.password = sys.stdin.readline().strip()
         self.log.logger.info('Попытка входа')
 
 
@@ -234,10 +243,13 @@ class ScriptRequest:
         if re.fullmatch(r'\d{2}\.\d{2}\.\d{4}$', self.text):
             curs_date = re.fullmatch(r'\d{2}\.\d{2}\.\d{4}$', self.text).group(0).split('.')
             result.append(curs_date)
-        elif re.fullmatch(r'\d{2}\.\d{2}\.\d{4} (?:[A-Z]{3} )*[A-Z]{3}$', self.text):
-            request = re.fullmatch(r'\d{2}\.\d{2}\.\d{4} (?:[A-Z]{3} )*[A-Z]{3}$', self.text).group(0).split()
+        elif re.fullmatch(r'\d{2}\.\d{2}\.\d{4} (?:\d{3} )*\d{3}$', self.text):
+            request = re.fullmatch(r'\d{2}\.\d{2}\.\d{4} (?:\d{3} )*\d{3}$', self.text).group(0).split()
             curs_date = request[0].split('.')
-            codes = request[1::]
+            codes = []
+            for i in request[1::]:
+                codes.append(int(i))
+            # codes = request[1::]
             result.append(curs_date)
             result.append(codes)
         else:
@@ -261,7 +273,9 @@ class User:
         order_no = self.db.cursor.execute(
             '''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(date_str)).fetchone()
         if order_no is None:
-            self.log.logger.info('Курсы валют не найдены')
+            msg = 'Курсы валют не найдены'
+            sys.stdout.write(msg)
+            self.log.logger.info(msg)
         else:
             order_no = order_no[0]
             if len(req) == 1:
@@ -277,6 +291,7 @@ class User:
                     '''SELECT * FROM CURRENCY_COURSES WHERE order_no = '{0}';'''.format(order_no)).fetchall()
                 for i in self.db.select_to_value(archive):
                     self.log.logger.info(i)
+                    sys.stdout.write(str(i) + '\n')
             elif len(req) == 2:
                 codes = req[1]
                 # Обновляем архив по конкретным кодам
@@ -297,22 +312,22 @@ class User:
                         results.append(tmp)
                 values = self.db.select_to_value(results)
                 for i in values:
+                    sys.stdout.write(str(i) + '\n')
                     self.log.logger.info(i)
 
 
 class UserAuthorizator(User):
+
     def get_currency(self, text):
         sr = ScriptRequest(text)
         req = sr.parse_command()
         date_str = sr.text.split()[0]
 
         # Подключение к DailyInfo, парсинг XML и получение курсов
-
         dic = DailyInfoClient(req[0])
         xml_file = dic.get_xml()
         parser = XMLParser(xml_file)
         values = parser.get_values()
-
         # Получение данных из БД (тут как-то можно использовать join?)
         division = self.db.cursor.execute('''
         SELECT division_id FROM USER_AUTHORIZATOR WHERE id = '{0}';'''.format(self.login)).fetchone()[0]
@@ -324,6 +339,7 @@ class UserAuthorizator(User):
             '''SELECT order_no FROM CURRENCY_COURSES WHERE currency_date = '{0}';'''.format(date_str)).fetchone()
         self.db.sql.commit()
         if order_no is None:
+
             # В архиве - пусто создаем ордер
             self.db.cursor.execute('''INSERT INTO CURRENCY_ORDER (created ,created_by, branch_id) 
             VALUES ('{0}', '{1}','{2}');'''.format(date_now, self.login, branch))
@@ -337,7 +353,7 @@ class UserAuthorizator(User):
                     self.db.cursor.execute('''INSERT INTO CURRENCY_COURSES (order_no, currency_no_1, currency_no_2, 
                     currency_date, scale, amount, created, created_by, branch_id) 
                     VALUES ({0}, '{1}', '{2}', '{3}', {4}, {5}, '{6}', '{7}', '{8}')
-                    '''.format(order_no, i.code, 'RUB', date_str, i.scale, i.rate, date_now, self.login, branch))
+                    '''.format(order_no, i.code, '810', date_str, i.scale, i.rate, date_now, self.login, branch))
                 self.db.cursor.execute('END;')
                 self.db.sql.commit()
                 # Выводим в лог курсы валют из таблицы
@@ -345,13 +361,15 @@ class UserAuthorizator(User):
                 WHERE order_no = '{0}';'''.format(order_no)).fetchall()
 
                 for i in self.db.select_to_value(select):
+                    sys.stdout.write(str(i) + '\n')
                     self.log.logger.info(i)
             elif len(req) == 2:
                 self.db.sql.commit()
                 request_values = []
                 # Получаем нужные курсы валют
+                # в req - инт в value - стр
                 for i in range(len(values)):
-                    if values[i].code in req[1]:
+                    if int(values[i].code) in req[1]:
                         request_values.append(values[i])
                         self.log.logger.info(values[i])
                 # Тут была вставка ордера
@@ -361,7 +379,7 @@ class UserAuthorizator(User):
                     self.db.cursor.execute('''INSERT INTO CURRENCY_COURSES (order_no, currency_no_1, currency_no_2, 
                                                         currency_date, scale, amount, created, created_by, branch_id) 
                                                         VALUES ({0}, '{1}', '{2}', '{3}', {4}, {5}, '{6}', '{7}', '{8}')
-                                                        '''.format(order_no, i.code, 'RUB', date_str, i.scale, i.rate,
+                                                        '''.format(order_no, i.code, '810', date_str, i.scale, i.rate,
                                                                    date_now, self.login, branch))
                 self.db.cursor.execute('END;')
                 selects = []
@@ -373,8 +391,8 @@ class UserAuthorizator(User):
                     selects.append(tmp)
                 values = self.db.select_to_value(selects)
                 for i in values:
+                    sys.stdout.write(str(i) + '\n')
                     self.log.logger.info(i)
-        # НАДО ПЕРЕПИСАТЬ ТО ЧТО НИЖЕ
         else:
             # В архиве есть записи
             order_no = order_no[0]
@@ -402,7 +420,7 @@ class UserAuthorizator(User):
                     self.db.cursor.execute('''INSERT INTO CURRENCY_COURSES (order_no, currency_no_1, currency_no_2, 
                                                     currency_date, scale, amount, created, created_by, branch_id) 
                                                     VALUES ({0}, '{1}', '{2}', '{3}', {4}, {5}, '{6}', '{7}', '{8}')
-                                                    '''.format(order_no, i.code, 'RUB', date_str, i.scale, i.rate,
+                                                    '''.format(order_no, i.code, '810', date_str, i.scale, i.rate,
                                                                date_now, self.login, branch))
                 self.db.sql.commit()
                 # Выводим в консоль курсы валют из таблицы
@@ -410,22 +428,22 @@ class UserAuthorizator(User):
                     '''SELECT * FROM CURRENCY_COURSES WHERE order_no = '{0}';'''.format(order_no)).fetchall()
                 for i in self.db.select_to_value(selects):
                     self.log.logger.info(i)
+                    sys.stdout.write(str(i) + '\n')
                 self.db.sql.commit()
             elif len(req) == 2:
                 # Находим уже существующие коды, обновляем ордер и архив
                 codes_exist = []
                 for i in req[1]:
                     tmp_codes_exist = self.db.cursor.execute('''SELECT currency_no_1 FROM CURRENCY_COURSES 
-                    WHERE currency_date = '{0}' AND currency_no_1 = '{1}';'''.format(date_str, i)).fetchone()
+                    WHERE currency_date = '{0}' AND currency_no_1 = '{1}';'''.format(date_str, str(i))).fetchone()
                     if tmp_codes_exist is not None:
                         codes_exist.append(tmp_codes_exist)
-
                 # Обновляем архив
                 self.db.cursor.execute('BEGIN TRANSACTION;')
                 for i in codes_exist:
                     self.db.cursor.execute('''UPDATE CURRENCY_COURSES SET updated = '{0}', updated_by = '{1}' 
                     WHERE order_no = {2} AND currency_date = '{3}' AND currency_no_1 = '{4}';
-                    '''.format(date_now, self.login, order_no, date_str, i[0]))
+                    '''.format(date_now, self.login, order_no, date_str, str(i[0])))
                 self.db.cursor.execute('END;')
                 self.db.sql.commit()
 
@@ -437,10 +455,10 @@ class UserAuthorizator(User):
                     list_codes_exist.append(codes_exist[i][0])
 
                 for i in range(len(req[1])):
-                    if req[1][i] not in list_codes_exist:
+                    if str(req[1][i]) not in list_codes_exist:
                         codes_dont_exist.append(req[1][i])
                 for i in range(len(values)):
-                    if values[i].code in codes_dont_exist:
+                    if int(values[i].code) in codes_dont_exist:
                         values_dont_exist.append(values[i])
 
                 # Добавляем несуществующие курсы в архив
@@ -449,7 +467,7 @@ class UserAuthorizator(User):
                     self.db.cursor.execute('''INSERT INTO CURRENCY_COURSES (order_no, currency_no_1, currency_no_2, 
                     currency_date, scale, amount, created, created_by, branch_id) 
                     VALUES ({0}, '{1}', '{2}', '{3}', {4}, {5}, '{6}', '{7}', '{8}')
-                    '''.format(order_no, i.code, 'RUB', date_str, i.scale, i.rate, date_now, self.login, branch))
+                    '''.format(order_no, i.code, '810', date_str, i.scale, i.rate, date_now, self.login, branch))
                 self.db.cursor.execute('END;')
                 self.db.sql.commit()
 
@@ -463,6 +481,7 @@ class UserAuthorizator(User):
                 values = self.db.select_to_value(selects)
                 for i in values:
                     self.log.logger.info(i)
+                    sys.stdout.write(str(i) + '\n')
 
 
 if __name__ == '__main__':
@@ -478,7 +497,7 @@ if __name__ == '__main__':
 
     command = ''
     while command.lower() != 'q':
-        command = input()
+        command = sys.stdin.readline().strip()
         if command.lower() != 'q':
             u.get_currency(command)
     db.close()
